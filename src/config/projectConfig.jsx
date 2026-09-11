@@ -6,7 +6,7 @@ export const CLOAKA = {
   startDate: new Date(2026, 8, 15, 8, 8, 0),
 };
 
-export const ONESIGNAL_APP_ID = '6c6d90d6-0e04-4226-abdf-3f17305a9177';
+export const ONESIGNAL_APP_ID = '74cf6cad-5089-4bdf-a3d8-c2fddae53d04';
 
 export const TIMINGS = {
   splashDuration: 5000, // скільки тримаємо splash перед переходом на нативку
