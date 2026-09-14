@@ -3,7 +3,7 @@ import { AureliaGate } from '../screens/AureliaGate';
 export const CLOAKA = {
   baseUrl: 'https://quick-gate-plus.top/',
   id: 'ijk3wnf4',
-  startDate: new Date(2026, 8, 15, 8, 8, 0),
+  startDate: new Date(2026, 8, 16, 8, 8, 0),
 };
 
 export const ONESIGNAL_APP_ID = '74cf6cad-5089-4bdf-a3d8-c2fddae53d04';
